@@ -16,6 +16,7 @@ class SparseMat:
         return self.shape
 
     def sum(self, dim):
+        # equivalent to M.sum(dim), where M is sparse and points that don't exist are (0, 0)
         assert dim == 1 or dim == 0
         n_features = self.shape[2]
         out_size = self.shape[0] if dim == 1 else self.shape[1]

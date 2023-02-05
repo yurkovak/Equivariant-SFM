@@ -54,10 +54,10 @@ class SetOfSetLayer(Module):
         out_all = self.lin_all(x.values)  # [all_points_everywhere, d_in] -> [all_points_everywhere, d_out]
 
         mean_rows = x.mean(dim=0) # [m,n,d_in] -> [n,d_in]
-        out_rows = self.lin_n(mean_rows)  # [n,d_in] -> [n,d_out]
+        out_rows = self.lin_n(mean_rows)  # [n,d_in] -> [n,d_out]  # each track's mean representation gets weighted
 
         mean_cols = x.mean(dim=1) # [m,n,d_in] -> [m,d_in]
-        out_cols = self.lin_m(mean_cols)  # [m,d_in] -> [m,d_out]
+        out_cols = self.lin_m(mean_cols)  # [m,d_in] -> [m,d_out]  # each camera's mean representation gets weighted
 
         out_both = self.lin_both(x.values.mean(dim=0, keepdim=True))  # [1,d_in] -> [1,d_out]
 

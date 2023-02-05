@@ -17,8 +17,8 @@ class ESFMLoss(nn.Module):
             self.hinge_loss_weight = 0
 
     def forward(self, pred_cam, data, epoch=None):
-        Ps = pred_cam["Ps_norm"]
-        pts_2d = Ps @ pred_cam["pts3D"]  # [m, 3, n]
+        Ps = pred_cam["Ps_norm"]  # [m, 3, 4]
+        pts_2d = Ps @ pred_cam["pts3D"]  # [m, 3, 4] @ [4, n] -> [m, 3, n]
 
         # Normalize gradient
         if self.normalize_grad:
@@ -26,7 +26,8 @@ class ESFMLoss(nn.Module):
 
         # Get point for reprojection loss
         if self.hinge_loss:
-            projected_points = geo_utils.get_positive_projected_pts_mask(pts_2d, self.infinity_pts_margin)
+            # mark as False points with very small w in homogeneous coordinates, that is, very large u, v in inhomogeneous coordinates
+            projected_points = geo_utils.get_positive_projected_pts_mask(pts_2d, self.infinity_pts_margin)  # [m, n], boolean mask
         else:
             projected_points = geo_utils.get_projected_pts_mask(pts_2d, self.infinity_pts_margin)
 
@@ -34,9 +35,11 @@ class ESFMLoss(nn.Module):
         hinge_loss = (self.infinity_pts_margin - pts_2d[:, 2, :]) * self.hinge_loss_weight
 
         # Calculate reprojection error
+        # From homogeneous coordinates to in inhomogeneous coordinates for all projected_points
         pts_2d = (pts_2d / torch.where(projected_points, pts_2d[:, 2, :], torch.ones_like(projected_points).float()).unsqueeze(dim=1))
         reproj_err = (pts_2d[:, 0:2, :] - data.norm_M.reshape(Ps.shape[0], 2, -1)).norm(dim=1)
 
+        # use reprojection error for projected_points, hinge_loss everywhere else
         return torch.where(projected_points, reproj_err, hinge_loss)[data.valid_pts].mean()
 
 

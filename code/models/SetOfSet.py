@@ -3,6 +3,7 @@ from torch import nn
 from models.baseNet import BaseNet
 from models.layers import *
 from utils.sparse_utils import SparseMat
+from datasets.SceneData import SceneData
 
 
 class SetOfSetBlock(nn.Module):
@@ -56,8 +57,8 @@ class SetOfSetNet(BaseNet):
         self.m_net = get_linear_layers([num_feats] * 2 + [m_d_out], final_layer=True, batchnorm=False)
         self.n_net = get_linear_layers([num_feats] * 2 + [n_d_out], final_layer=True, batchnorm=False)
 
-    def forward(self, data: SparseMat):
-        x = data.x  # x is [m,n,d] sparse matrix
+    def forward(self, data: SceneData):
+        x: SparseMat = data.x  # x is [m,n,d] sparse matrix
         x = self.embed(x)
         for eq_block in self.equivariant_blocks:
             x = eq_block(x)  # [m,n,d_in] -> [m,n,d_out]
@@ -70,6 +71,7 @@ class SetOfSetNet(BaseNet):
         n_input = x.mean(dim=0) # [n,d_out]
         n_out = self.n_net(n_input).T  # [n, d_n] -> [d_n, n]
 
+        # predict extrinsic matrix
         pred_cam = self.extract_model_outputs(m_out, n_out, data)
 
         return pred_cam
