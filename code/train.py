@@ -39,7 +39,9 @@ def epoch_evaluation(data_loader, model, conf, epoch, phase, save_predictions=Fa
     model.eval()
     with torch.no_grad():
         for batch_data in data_loader:
+            # A batch of scenes
             for curr_data in batch_data:
+                # One scene
                 # Get predictions
                 begin_time = time()
                 pred_cam = model(curr_data)
