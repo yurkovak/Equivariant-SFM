@@ -10,3 +10,4 @@ plotly
 matplotlib
 dask
 pytorch3d
+tensorboard
