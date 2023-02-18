@@ -9,6 +9,8 @@ from utils import path_utils, dataset_utils, plot_utils
 from time import time
 import pandas as pd
 from utils.Phases import Phases
+from utils.path_utils import path_to_exp
+from torch.utils.tensorboard import SummaryWriter
 
 
 def epoch_train(train_data, model, loss_func, optimizer, scheduler, epoch):
@@ -39,7 +41,9 @@ def epoch_evaluation(data_loader, model, conf, epoch, phase, save_predictions=Fa
     model.eval()
     with torch.no_grad():
         for batch_data in data_loader:
+            # A batch of scenes
             for curr_data in batch_data:
+                # One scene
                 # Get predictions
                 begin_time = time()
                 pred_cam = model(curr_data)
@@ -91,6 +95,8 @@ def train(conf, train_data, model, phase, validation_data=None, test_data=None):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=scheduler_milestone, gamma=gamma)
+    logger = SummaryWriter(path_to_exp(conf))
+    print(f'Starting a logger at {path_to_exp(conf)}')
 
     best_validation_metric = math.inf
     best_epoch = 0
@@ -102,6 +108,7 @@ def train(conf, train_data, model, phase, validation_data=None, test_data=None):
 
     for epoch in range(num_of_epochs):
         mean_train_loss, train_losses = epoch_train(train_data, model, loss_func, optimizer, scheduler, epoch)
+        logger.add_scalar(tag='Train/Loss', scalar_value=mean_train_loss, global_step=epoch)
         if epoch % 100 == 0:
             print('{} Train Loss: {}'.format(epoch, mean_train_loss))
         if epoch % eval_intervals == 0 or epoch == num_of_epochs - 1:  # Eval current results
@@ -111,6 +118,10 @@ def train(conf, train_data, model, phase, validation_data=None, test_data=None):
                 validation_errors = epoch_evaluation(train_data, model, conf, epoch, phase, save_predictions=True,bundle_adjustment=no_ba_during_training)
 
             metric = validation_errors.loc[["Mean"], validation_metric].sum(axis=1).values.item()
+            for scene in validation_errors.index:
+                for metric_name in validation_errors.columns:
+                    metric_value = validation_errors.loc[scene, metric_name]
+                    logger.add_scalar(tag=f'{scene}/{metric_name}', scalar_value=metric_value, global_step=epoch)
 
             if metric < best_validation_metric:
                 converge_time = time()-begin_time
