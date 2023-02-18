@@ -1,7 +1,13 @@
 import torch
 import os
-from utils import geo_utils, ba_functions
+from utils import geo_utils
 import numpy as np
+
+BA_ERROR = None
+try:
+    from utils import ba_functions
+except ModuleNotFoundError as e:
+    BA_ERROR = e
 
 
 def prepare_predictions(data, pred_cam, conf, bundle_adjustment):
@@ -16,7 +22,7 @@ def prepare_predictions(data, pred_cam, conf, bundle_adjustment):
     xs = geo_utils.M_to_xs(M)
 
     Ps_norm = pred_cam["Ps_norm"].cpu().numpy()  # Normalized camera!!
-    Ps = Ns_inv @ Ps_norm  # unnormalized cameras
+    Ps = Ns_inv @ Ps_norm  # unnormalized cameras K @ [R | t]
     pts3D_pred = geo_utils.pflat(pred_cam["pts3D"]).cpu().numpy()
 
     pts3D_triangulated = geo_utils.n_view_triangulation(Ps, M=M, Ns=Ns)
@@ -45,6 +51,8 @@ def prepare_predictions(data, pred_cam, conf, bundle_adjustment):
         outputs['pts3D_triangulated_fixed'] = (similarity_mat @ pts3D_triangulated)
 
         if bundle_adjustment:
+            if BA_ERROR is not None:
+                raise BA_ERROR
             repeat = conf.get_bool('ba.repeat')
             triangulation = conf.get_bool('ba.triangulation')
             ba_res = ba_functions.euc_ba(xs, Rs=Rs_pred, ts=ts_pred, Ks=np.linalg.inv(Ns),
@@ -82,6 +90,7 @@ def compute_errors(outputs, conf, bundle_adjustment):
     pts3D_triangulated = outputs['pts3D_triangulated']
 
     model_errors["our_repro"] = np.nanmean(geo_utils.reprojection_error_with_points(Ps, pts3D_pred.T, xs))
+    # triangulated_repro doesn't involve predictions, it's a baseline
     model_errors["triangulated_repro"] = np.nanmean(geo_utils.reprojection_error_with_points(Ps, pts3D_triangulated.T, xs))
     if calibrated:
         Rs_fixed = outputs['Rs_fixed']

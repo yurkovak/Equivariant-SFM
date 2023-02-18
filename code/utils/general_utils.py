@@ -122,7 +122,7 @@ def parse_external_params(ext_params_str, conf):
 def init_exp(default_phase):
     # Parse Arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--conf', type=str)
+    parser.add_argument('--conf', default='Optimization_Euc.conf', type=str)
     parser.add_argument('--scan', type=str, default=None)
     parser.add_argument('--exp_version', type=str, default=None)
     parser.add_argument('--external_params', type=str, default=None)
