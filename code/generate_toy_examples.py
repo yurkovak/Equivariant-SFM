@@ -149,9 +149,11 @@ if __name__ == '__main__':
     # 'dtu500', 'Jonas Ahlstromer', 'Lund University Sphinx', 'Tsar Nikolai I', 'Urban II'
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', '-n', type=str, help='Scene name',
+    parser.add_argument('--name', '-n', type=str,
+                        help='Scene name, use "all" to iterate over all scenes',
                         choices=scene_choices + ['all'])
-    parser.add_argument('--cam_src', '-c', type=str, help='Scene name to take cameras from',
+    parser.add_argument('--cam_src', '-c', type=str,
+                        help='Scene name to take cameras from, use "all" to iterate over all camera sources',
                         choices=cam_choices + ['all'])
     parser.add_argument('--visualize', action='store_true', help='Add to plot the cloud')
     parser.add_argument('--target_fraction', '-frac', default=None, type=str,
