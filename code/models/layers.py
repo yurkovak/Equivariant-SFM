@@ -67,6 +67,55 @@ class SetOfSetLayer(Module):
         return SparseMat(new_features, x.indices, x.cam_per_pts, x.pts_per_cam, new_shape)
 
 
+class SetOfSetLayerSelfAttention(Module):
+    def __init__(self, d_in, d_out, add_residual: bool = False):
+        super(SetOfSetLayerSelfAttention, self).__init__()
+        # n is the number of points and m is the number of cameras
+        self.lin_all_value = Linear(d_in, d_out)
+        self.lin_both_value = Linear(d_in, d_out)
+
+        self.lin_n_value = Linear(d_in, d_out)
+        self.lin_n_key = Linear(d_in, d_out)
+        self.lin_n_query = Linear(d_in, d_out)
+
+        self.lin_m_value = Linear(d_in, d_out)
+        self.lin_m_key = Linear(d_in, d_out)
+        self.lin_m_query = Linear(d_in, d_out)
+
+        self.add_residual = add_residual and d_in == d_out
+
+    def forward(self, x):
+        # x is [m,n,d] sparse matrix
+        out_all = self.lin_all_value(x.values)  # [all_points_everywhere, d_in] -> [all_points_everywhere, d_out]
+
+        mean_rows = x.mean(dim=0) # [m,n,d_in] -> [n,d_in]
+        out_rows_value = self.lin_n_value(mean_rows)  # [n,d_in] -> [n,d_out]  # each track's mean representation gets weighted
+        out_rows_key = self.lin_n_key(mean_rows)
+        out_rows_query = self.lin_n_query(mean_rows)
+
+        out_rows_scores = torch.softmax((out_rows_query @ out_rows_key.T) / (out_rows_key.shape[1] ** 0.5), axis=1)
+        out_rows = out_rows_scores @ out_rows_value
+        if self.add_residual:
+            out_rows += mean_rows
+
+        mean_cols = x.mean(dim=1)  # [m,n,d_in] -> [m,d_in]
+        out_cols_value = self.lin_m_value(mean_cols)  # [m,d_in] -> [m,d_out]  # each camera's mean representation gets weighted
+        out_cols_key = self.lin_m_key(mean_cols)
+        out_cols_query = self.lin_m_query(mean_cols)
+
+        out_cols_scores = torch.softmax((out_cols_query @ out_cols_key.T) / (out_cols_key.shape[1] ** 0.5), axis=1)
+        out_cols = out_cols_scores @ out_cols_value
+        if self.add_residual:
+            out_cols += mean_cols
+
+        out_both = self.lin_both_value(x.values.mean(dim=0, keepdim=True))  # [1,d_in] -> [1,d_out]
+
+        new_features = (out_all + out_rows[x.indices[1], :] + out_cols[x.indices[0], :] + out_both) / 4  # [nnz,d_out]
+        new_shape = (x.shape[0], x.shape[1], new_features.shape[1])
+
+        return SparseMat(new_features, x.indices, x.cam_per_pts, x.pts_per_cam, new_shape)
+
+
 class ProjLayer(Module):
     def __init__(self, d_in, d_out):
         super(ProjLayer, self).__init__()
