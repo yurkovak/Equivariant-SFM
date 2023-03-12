@@ -67,20 +67,46 @@ class SetOfSetLayer(Module):
         return SparseMat(new_features, x.indices, x.cam_per_pts, x.pts_per_cam, new_shape)
 
 
+def multi_head_attention(features: torch.Tensor, num_heads: int):
+    """A differentiable multi head attention function.
+
+    :param features: The embedding for Q, K and V for all heads of shape (sequence_len, all_heads_emb_dim * 3)
+    :param num_heads: features will be split into N heads, each with all_heads_emb_dim // num_heads features dim
+
+    Returns:
+      y (torch.Tensor): The multi head attention output.
+        Has shape `(sequence_size, num_heads * head_emb_dim)`.
+    """
+    sequence_len, all_heads_emb_dim = features.shape
+    head_emb_dim = all_heads_emb_dim // num_heads // 3
+    # [sequence_len, 3, num_heads, head_emb_dim]
+    features = features.reshape((sequence_len, 3, num_heads, head_emb_dim))
+    # [num_heads, 3, sequence_len, head_emb_dim]
+    features = features.permute((2, 1, 0, 3))
+
+    q, k, v = features.unbind(dim=1)
+    all_head_emb_dim = head_emb_dim * num_heads
+    attention_scores = torch.matmul(q, k.transpose(1, 2))
+    attention_scores = attention_scores / (head_emb_dim ** 0.5)
+    attention_probs = torch.softmax(attention_scores, dim=-1)
+    context_layer = torch.matmul(attention_probs, v)
+    context_layer = context_layer.transpose(0, 1)
+    return context_layer.reshape(sequence_len, all_head_emb_dim)
+
+
 class SetOfSetLayerSelfAttention(Module):
-    def __init__(self, d_in, d_out, add_residual: bool = False):
+    def __init__(self, d_in, d_out, num_heads: int = 1, add_residual: bool = False):
         super(SetOfSetLayerSelfAttention, self).__init__()
+        if d_out % num_heads != 0:
+            raise ValueError('d_out % num_heads must be equal to 0')
+
         # n is the number of points and m is the number of cameras
         self.lin_all_value = Linear(d_in, d_out)
         self.lin_both_value = Linear(d_in, d_out)
 
-        self.lin_n_value = Linear(d_in, d_out)
-        self.lin_n_key = Linear(d_in, d_out)
-        self.lin_n_query = Linear(d_in, d_out)
-
-        self.lin_m_value = Linear(d_in, d_out)
-        self.lin_m_key = Linear(d_in, d_out)
-        self.lin_m_query = Linear(d_in, d_out)
+        self.lin_n_qkv = Linear(d_in, d_out * 3)
+        self.lin_m_qkv = Linear(d_in, d_out * 3)
+        self.num_heads = num_heads
 
         self.add_residual = add_residual and d_in == d_out
 
@@ -88,23 +114,15 @@ class SetOfSetLayerSelfAttention(Module):
         # x is [m,n,d] sparse matrix
         out_all = self.lin_all_value(x.values)  # [all_points_everywhere, d_in] -> [all_points_everywhere, d_out]
 
-        mean_rows = x.mean(dim=0) # [m,n,d_in] -> [n,d_in]
-        out_rows_value = self.lin_n_value(mean_rows)  # [n,d_in] -> [n,d_out]  # each track's mean representation gets weighted
-        out_rows_key = self.lin_n_key(mean_rows)
-        out_rows_query = self.lin_n_query(mean_rows)
-
-        out_rows_scores = torch.softmax((out_rows_query @ out_rows_key.T) / (out_rows_key.shape[1] ** 0.5), axis=1)
-        out_rows = out_rows_scores @ out_rows_value
+        mean_rows = x.mean(dim=0)  # [m,n,d_in] -> [n,d_in]
+        out_rows_qkv = self.lin_n_qkv(mean_rows)   # [n,d_in] -> [n,d_out], each track's mean goes into attention
+        out_rows = multi_head_attention(out_rows_qkv, self.num_heads)
         if self.add_residual:
             out_rows += mean_rows
 
         mean_cols = x.mean(dim=1)  # [m,n,d_in] -> [m,d_in]
-        out_cols_value = self.lin_m_value(mean_cols)  # [m,d_in] -> [m,d_out]  # each camera's mean representation gets weighted
-        out_cols_key = self.lin_m_key(mean_cols)
-        out_cols_query = self.lin_m_query(mean_cols)
-
-        out_cols_scores = torch.softmax((out_cols_query @ out_cols_key.T) / (out_cols_key.shape[1] ** 0.5), axis=1)
-        out_cols = out_cols_scores @ out_cols_value
+        out_cols_qkv = self.lin_m_qkv(mean_cols)  # [m,d_in] -> [m,d_out], each camera's mean goes into attention
+        out_cols = multi_head_attention(out_cols_qkv, self.num_heads)
         if self.add_residual:
             out_cols += mean_cols
 
@@ -112,7 +130,6 @@ class SetOfSetLayerSelfAttention(Module):
 
         new_features = (out_all + out_rows[x.indices[1], :] + out_cols[x.indices[0], :] + out_both) / 4  # [nnz,d_out]
         new_shape = (x.shape[0], x.shape[1], new_features.shape[1])
-
         return SparseMat(new_features, x.indices, x.cam_per_pts, x.pts_per_cam, new_shape)
 
 
