@@ -580,6 +580,73 @@ def dilutePoint(M):
     return newM
 
 
+def valid_points_fraction(M, valid_points_indices=None):
+    """
+    :return: a fraction of real points in the sparse matrix, number of valid points, maximum possible number of points
+    """
+    M = torch.from_numpy(M).float() if isinstance(M, np.ndarray) else M
+    if valid_points_indices is None:
+        valid_points_indices = torch.nonzero(dataset_utils.get_M_valid_points(M)).T
+    num_valid_points = valid_points_indices.shape[1]
+    num_all_points = M.shape[0] // 2 * M.shape[1]
+    return num_valid_points / num_all_points, num_valid_points, num_all_points
+
+
+def pollute_M(M, outliers_ratio: float):
+    """
+    Randomly set some points to random pixel values
+    :param outliers_ratio: how much noise ot add, in percent from valid pointsfraction
+    """
+    assert 0. <= outliers_ratio < 1., 'outliers_ratio must be in [0, 1) interval'
+
+    valid_points_mask = dataset_utils.get_M_valid_points(M)
+    points_indices = torch.nonzero(valid_points_mask).T  # [2, the number of points in the scene]
+    points_fraction, _, num_all_points = valid_points_fraction(M, points_indices)
+    outliers_fraction = points_fraction * outliers_ratio
+    num_outliers = int(outliers_fraction * num_all_points)
+    cam_idx = np.random.choice(M.shape[0] // 2, size=num_outliers, replace=True)
+    track_idx = np.random.choice(M.shape[1], size=num_outliers, replace=True)
+    # outlier_indices = np.stack([cam_idx, track_idx])  # creates duplicates which so below lines prevent
+    outlier_indices = torch.zeros_like(valid_points_mask)
+    outlier_indices[cam_idx, track_idx] = True
+    outlier_indices = torch.nonzero(outlier_indices).T
+
+    M[cam_idx * 2, track_idx] = torch.randint(low=0, high=int(M[::2].max()), size=(num_outliers, )).float()
+    M[cam_idx * 2 + 1, track_idx] = torch.randint(low=0, high=int(M[1::2].max()), size=(num_outliers,)).float()
+    return M, outlier_indices
+
+
+def sparsify_M(M, target_fraction: tuple):
+    """
+    Replace random points with zeros so that the resulting valid points fraction is within a range
+    defined by target_fraction
+    """
+    points_indices = torch.nonzero(torch.tensor(dataset_utils.get_M_valid_points(M))).T
+    points_fraction, _, num_all_points = valid_points_fraction(M, points_indices)
+
+    target_fraction = np.random.uniform(*target_fraction)
+    to_zero_fraction = points_fraction - target_fraction
+    num_points_to_zero = int(to_zero_fraction * num_all_points)
+    points_idx_to_zero = np.random.choice(points_indices.shape[1], size=num_points_to_zero, replace=False)
+    zero_points_indices = points_indices[:, points_idx_to_zero]
+    cam_idx, track_idx = zero_points_indices
+    M[cam_idx * 2 + 1, track_idx] = 0.
+    M[cam_idx * 2, track_idx] = 0.
+    return M
+
+
+def remove_empty_tracks_cams(M, pts_per_cal_thresh: int = 10, cam_per_pts_thresh: int = 5):
+    """
+    Remove columns/rows that don't pass thresholds by points count
+    """
+    valid_pts = dataset_utils.get_M_valid_points(M)
+    cam_per_pts = valid_pts.sum(axis=0)  # [n_pts]
+    pts_per_cam = valid_pts.sum(axis=1)  # [n_cams]
+    M = M[pts_per_cam.repeat(2) > pts_per_cal_thresh]
+    M = M[:, cam_per_pts > cam_per_pts_thresh]
+    return M
+
+
 def sample_sub_matrix(m,n, part=0.5):
     i_idx = np.sort(np.random.choice(m, size=int(m*part), replace=False))
     j_idx = np.sort(np.random.choice(n, size=int(n*part), replace=False))
