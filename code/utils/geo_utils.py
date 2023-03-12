@@ -635,6 +635,37 @@ def sparsify_M(M, target_fraction: tuple):
     return M
 
 
+def damage_tracks(M, damaged_track_ratio: float, track_outliers_ratio: float):
+    """
+    Pick damaged_track_ratio % of tracks, in each selected track add random point coordinates in the amount equal to
+    track_outliers_ratio * existing points, that is, num outliers given as a percentage of existing points in this track
+    """
+    assert track_outliers_ratio > 0., 'track_outliers_ratio must be > 0.'
+    assert 0 < damaged_track_ratio < 1, 'damaged_track_ratio must be in (0, 1) interval'
+
+    M = torch.from_numpy(M).float() if isinstance(M, np.ndarray) else M
+    m, n = M.shape[0] // 2, M.shape[1]
+    num_damaged_tracks = int(n * damaged_track_ratio)
+    damaged_tracks_ids = np.sort(np.random.choice(n, size=num_damaged_tracks, replace=False))
+
+    valid_pts = dataset_utils.get_M_valid_points(M)
+    cam_per_pts = valid_pts.sum(dim=0)
+
+    outlier_indices = np.empty((2, 0), dtype=int)
+    for track_id in damaged_tracks_ids:
+        points_in_track = cam_per_pts[track_id]
+        empty_cameras = torch.where(valid_pts[:, track_id] == False)[0]
+        num_track_outliers = min(int(np.round(points_in_track * track_outliers_ratio)), len(empty_cameras))
+        track_outlier_cams = np.sort(np.random.choice(empty_cameras, size=num_track_outliers, replace=False))
+        M[track_outlier_cams * 2, track_id] = torch.randint(low=0, high=int(M[::2].max()),
+                                                            size=(num_track_outliers, )).float()
+        M[track_outlier_cams * 2 + 1, track_id] = torch.randint(low=0, high=int(M[1::2].max()),
+                                                                size=(num_track_outliers,)).float()
+        track_outlier_indices = np.stack([track_outlier_cams, np.repeat(track_id, num_track_outliers)])
+        outlier_indices = np.concatenate([outlier_indices, track_outlier_indices], axis=1)
+    return M, damaged_tracks_ids, outlier_indices
+
+
 def remove_empty_tracks_cams(M, pts_per_cal_thresh: int = 10, cam_per_pts_thresh: int = 5):
     """
     Remove columns/rows that don't pass thresholds by points count
