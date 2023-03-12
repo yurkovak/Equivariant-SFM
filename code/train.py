@@ -101,6 +101,7 @@ def train(conf, train_data, model, phase, validation_data=None, test_data=None):
 
     optim_type = conf.get_string('train.optim_type', default='Adam')
     optimizer = OPTIMIZER_TYPES[optim_type](model.parameters(), lr=lr)
+    print(f'Training with optimizer of type {type(optimizer)}')
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=scheduler_milestone, gamma=gamma)
     logger = SummaryWriter(path_to_exp(conf))
     print(f'Starting a logger at {path_to_exp(conf)}')

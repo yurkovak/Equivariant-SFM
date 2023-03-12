@@ -69,7 +69,8 @@ class BaseNet(torch.nn.Module):
                 Ps = Ps / Ps.norm(dim=(1, 2), p='fro', keepdim=True)
 
         # The model outputs a normalized camera! Meaning from world coordinates to camera coordinates, not to pixels in the image.
-        # [R | t]
+        # Ps_norm: [R | t]
+        # pts_3D: world coordinates
         pred_cams = {"Ps_norm": Ps, "pts3D": pts_3D}
         return pred_cams
 
