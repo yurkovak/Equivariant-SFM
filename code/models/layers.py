@@ -95,7 +95,8 @@ def multi_head_attention(features: torch.Tensor, num_heads: int):
 
 
 class SetOfSetLayerSelfAttention(Module):
-    def __init__(self, d_in, d_out, num_heads: int = 1, add_residual: bool = False):
+    def __init__(self, d_in, d_out, num_heads: int = 1, add_residual: bool = False,
+                 track_attention: bool = True, camera_attention: bool = True):
         super(SetOfSetLayerSelfAttention, self).__init__()
         if d_out % num_heads != 0:
             raise ValueError('d_out % num_heads must be equal to 0')
@@ -104,8 +105,17 @@ class SetOfSetLayerSelfAttention(Module):
         self.lin_all_value = Linear(d_in, d_out)
         self.lin_both_value = Linear(d_in, d_out)
 
-        self.lin_n_qkv = Linear(d_in, d_out * 3)
-        self.lin_m_qkv = Linear(d_in, d_out * 3)
+        self.track_attention = track_attention
+        if self.track_attention:
+            self.lin_n_qkv = Linear(d_in, d_out * 3)
+        else:
+            self.lin_n = Linear(d_in, d_out)
+
+        self.camera_attention = camera_attention
+        if self.camera_attention:
+            self.lin_m_qkv = Linear(d_in, d_out * 3)
+        else:
+            self.lin_m = Linear(d_in, d_out)
         self.num_heads = num_heads
 
         self.add_residual = add_residual and d_in == d_out
@@ -115,16 +125,22 @@ class SetOfSetLayerSelfAttention(Module):
         out_all = self.lin_all_value(x.values)  # [all_points_everywhere, d_in] -> [all_points_everywhere, d_out]
 
         mean_rows = x.mean(dim=0)  # [m,n,d_in] -> [n,d_in]
-        out_rows_qkv = self.lin_n_qkv(mean_rows)   # [n,d_in] -> [n,d_out], each track's mean goes into attention
-        out_rows = multi_head_attention(out_rows_qkv, self.num_heads)
-        if self.add_residual:
-            out_rows += mean_rows
+        if self.track_attention:
+            out_rows_qkv = self.lin_n_qkv(mean_rows)   # [n,d_in] -> [n,d_out], each track's mean goes into attention
+            out_rows = multi_head_attention(out_rows_qkv, self.num_heads)
+            if self.add_residual:
+                out_rows += mean_rows
+        else:
+            out_rows = self.lin_n(mean_rows)
 
         mean_cols = x.mean(dim=1)  # [m,n,d_in] -> [m,d_in]
-        out_cols_qkv = self.lin_m_qkv(mean_cols)  # [m,d_in] -> [m,d_out], each camera's mean goes into attention
-        out_cols = multi_head_attention(out_cols_qkv, self.num_heads)
-        if self.add_residual:
-            out_cols += mean_cols
+        if self.camera_attention:
+            out_cols_qkv = self.lin_m_qkv(mean_cols)  # [m,d_in] -> [m,d_out], each camera's mean goes into attention
+            out_cols = multi_head_attention(out_cols_qkv, self.num_heads)
+            if self.add_residual:
+                out_cols += mean_cols
+        else:
+            out_cols = self.lin_m(mean_cols)
 
         out_both = self.lin_both_value(x.values.mean(dim=0, keepdim=True))  # [1,d_in] -> [1,d_out]
 
