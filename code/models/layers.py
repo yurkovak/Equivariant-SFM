@@ -95,7 +95,7 @@ def multi_head_attention(features: torch.Tensor, num_heads: int):
 
 
 class SetOfSetLayerSelfAttention(Module):
-    def __init__(self, d_in, d_out, num_heads: int = 1, add_residual: bool = False,
+    def __init__(self, d_in, d_out, num_heads: int = 1, add_residual: bool = False, add_norm: bool = True,
                  track_attention: bool = True, camera_attention: bool = True):
         super(SetOfSetLayerSelfAttention, self).__init__()
         if d_out % num_heads != 0:
@@ -107,12 +107,14 @@ class SetOfSetLayerSelfAttention(Module):
 
         self.track_attention = track_attention
         if self.track_attention:
+            self.norm_n = torch.nn.LayerNorm(d_in, eps=1e-6) if add_norm else torch.nn.Identity()
             self.lin_n_qkv = Linear(d_in, d_out * 3)
         else:
             self.lin_n = Linear(d_in, d_out)
 
         self.camera_attention = camera_attention
         if self.camera_attention:
+            self.norm_m = torch.nn.LayerNorm(d_in, eps=1e-6) if add_norm else torch.nn.Identity()
             self.lin_m_qkv = Linear(d_in, d_out * 3)
         else:
             self.lin_m = Linear(d_in, d_out)
@@ -126,6 +128,7 @@ class SetOfSetLayerSelfAttention(Module):
 
         mean_rows = x.mean(dim=0)  # [m,n,d_in] -> [n,d_in]
         if self.track_attention:
+            mean_rows = self.norm_n(mean_rows)
             out_rows_qkv = self.lin_n_qkv(mean_rows)   # [n,d_in] -> [n,d_out], each track's mean goes into attention
             out_rows = multi_head_attention(out_rows_qkv, self.num_heads)
             if self.add_residual:
@@ -135,6 +138,7 @@ class SetOfSetLayerSelfAttention(Module):
 
         mean_cols = x.mean(dim=1)  # [m,n,d_in] -> [m,d_in]
         if self.camera_attention:
+            mean_cols = self.norm_m(mean_cols)
             out_cols_qkv = self.lin_m_qkv(mean_cols)  # [m,d_in] -> [m,d_out], each camera's mean goes into attention
             out_cols = multi_head_attention(out_cols_qkv, self.num_heads)
             if self.add_residual:
