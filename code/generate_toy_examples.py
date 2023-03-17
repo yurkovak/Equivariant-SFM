@@ -1,3 +1,11 @@
+"""
+Example launch commands:
+
+python3 generate_toy_examples.py -n all -c all --visualize -colsub 5000 -rowsub 15 -frac "0.2 0.21"
+python3 generate_toy_examples.py -n "Spider_Monkey" -c "dtu106" --visualize -colsub 5000 -rowsub 15 -frac "0.2 0.21"
+python3 generate_toy_examples.py -n "Dog" -c "The Pumpkin" --visualize -colsub 5000 -rowsub 15 -frac "0.2 0.21"
+"""
+
 import os
 import warnings
 
@@ -12,7 +20,7 @@ from pytorch3d.io import load_obj
 from utils import geo_utils, plot_utils
 
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore")  # suppresses torch warnings about a missing texture files alongside obj moodels
 
 
 CAMERA_SRC_CFG = {
