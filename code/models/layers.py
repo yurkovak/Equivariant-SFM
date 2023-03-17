@@ -91,7 +91,7 @@ def multi_head_attention(features: torch.Tensor, num_heads: int):
     attention_probs = torch.softmax(attention_scores, dim=-1)
     context_layer = torch.matmul(attention_probs, v)
     context_layer = context_layer.transpose(0, 1)
-    return context_layer.reshape(sequence_len, all_head_emb_dim)
+    return context_layer.reshape(sequence_len, all_head_emb_dim), attention_probs
 
 
 class SetOfSetLayerSelfAttention(Module):
@@ -129,26 +129,26 @@ class SetOfSetLayerSelfAttention(Module):
         mean_rows = x.mean(dim=0)  # [m,n,d_in] -> [n,d_in]
         if self.track_attention:
             mean_rows = self.norm_n(mean_rows)
-            out_rows_qkv = self.lin_n_qkv(mean_rows)   # [n,d_in] -> [n,d_out], each track's mean goes into attention
-            out_rows = multi_head_attention(out_rows_qkv, self.num_heads)
+            out_tracks_qkv = self.lin_n_qkv(mean_rows)   # [n,d_in] -> [n,d_out], each track's mean goes into attention
+            out_tracks, track_attention_map = multi_head_attention(out_tracks_qkv, self.num_heads)
             if self.add_residual:
-                out_rows += mean_rows
+                out_tracks += mean_rows
         else:
-            out_rows = self.lin_n(mean_rows)
+            out_tracks = self.lin_n(mean_rows)
 
         mean_cols = x.mean(dim=1)  # [m,n,d_in] -> [m,d_in]
         if self.camera_attention:
             mean_cols = self.norm_m(mean_cols)
-            out_cols_qkv = self.lin_m_qkv(mean_cols)  # [m,d_in] -> [m,d_out], each camera's mean goes into attention
-            out_cols = multi_head_attention(out_cols_qkv, self.num_heads)
+            out_cams_qkv = self.lin_m_qkv(mean_cols)  # [m,d_in] -> [m,d_out], each camera's mean goes into attention
+            out_cams, cams_attention_map = multi_head_attention(out_cams_qkv, self.num_heads)
             if self.add_residual:
-                out_cols += mean_cols
+                out_cams += mean_cols
         else:
-            out_cols = self.lin_m(mean_cols)
+            out_cams = self.lin_m(mean_cols)
 
         out_both = self.lin_both_value(x.values.mean(dim=0, keepdim=True))  # [1,d_in] -> [1,d_out]
 
-        new_features = (out_all + out_rows[x.indices[1], :] + out_cols[x.indices[0], :] + out_both) / 4  # [nnz,d_out]
+        new_features = (out_all + out_tracks[x.indices[1], :] + out_cams[x.indices[0], :] + out_both) / 4  # [nnz,d_out]
         new_shape = (x.shape[0], x.shape[1], new_features.shape[1])
         return SparseMat(new_features, x.indices, x.cam_per_pts, x.pts_per_cam, new_shape)
 
