@@ -16,11 +16,6 @@ from utils.path_utils import path_to_exp, path_to_cameras, path_to_code_logs, pa
 import random
 
 
-def set_seeds(seed: int = 0):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
-
 def log_code(conf):
     code_path = path_to_code_logs(conf)
 
