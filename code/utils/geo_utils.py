@@ -8,10 +8,6 @@ from utils import dataset_utils
 import dask.array as da
 
 
-torch.manual_seed(0)
-np.random.seed(0)
-
-
 def compare_rotations(R1, R2):
     if isinstance(R1, np.ndarray):
         cos_err = (R1 @ np.transpose(R2, [0,2,1])) [:, np.arange(3), np.arange(3)]

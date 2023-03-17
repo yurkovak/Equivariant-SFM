@@ -50,4 +50,7 @@ def train_single_model(conf, device, phase):
 
 if __name__ == "__main__":
     conf, device, phase = general_utils.init_exp(Phases.OPTIMIZATION.name)
+    seed = conf.get_int('seed', default=-1)
+    if seed >= 0:
+        general_utils.set_seeds(seed)
     train_single_model(conf, device, phase)
