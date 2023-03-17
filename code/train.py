@@ -1,7 +1,7 @@
 import time
 import torch
 import math
-
+from utils.lion_pytorch import Lion
 import loss_functions
 import evaluation
 import copy
@@ -11,6 +11,12 @@ import pandas as pd
 from utils.Phases import Phases
 from utils.path_utils import path_to_exp
 from torch.utils.tensorboard import SummaryWriter
+
+
+OPTIMIZER_TYPES = {
+    'Adam': torch.optim.Adam,
+    'Lion': Lion,
+}
 
 
 def epoch_train(train_data, model, loss_func, optimizer, scheduler, epoch):
@@ -93,7 +99,12 @@ def train(conf, train_data, model, phase, validation_data=None, test_data=None):
     scheduler_milestone = conf.get_list('train.scheduler_milestone')
     gamma = conf.get_float('train.gamma', default=0.1)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optim_type = conf.get_string('train.optim_type', default='Adam')
+    optimizer = OPTIMIZER_TYPES[optim_type](model.parameters(), lr=lr)
+    print(f'Training with optimizer of type {type(optimizer)}')
+    damaged_track_ratio = conf.get_float('dataset.damaged_track_ratio', default=0.)
+    track_outliers_ratio = conf.get_float('dataset.track_outliers_ratio', default=0.)
+    print(f'Training with damaged_track_ratio={damaged_track_ratio}, track_outliers_ratio={track_outliers_ratio}')
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=scheduler_milestone, gamma=gamma)
     logger = SummaryWriter(path_to_exp(conf))
     print(f'Starting a logger at {path_to_exp(conf)}')
@@ -104,7 +115,7 @@ def train(conf, train_data, model, phase, validation_data=None, test_data=None):
     converge_time = -1
     begin_time = time()
 
-    no_ba_during_training = not conf.get_bool('ba.only_last_eval')
+    ba_during_training = not conf.get_bool('ba.only_last_eval')
 
     for epoch in range(num_of_epochs):
         mean_train_loss, train_losses = epoch_train(train_data, model, loss_func, optimizer, scheduler, epoch)
@@ -113,9 +124,9 @@ def train(conf, train_data, model, phase, validation_data=None, test_data=None):
             print('{} Train Loss: {}'.format(epoch, mean_train_loss))
         if epoch % eval_intervals == 0 or epoch == num_of_epochs - 1:  # Eval current results
             if phase is Phases.TRAINING:
-                validation_errors = epoch_evaluation(validation_data, model, conf, epoch, Phases.VALIDATION, save_predictions=True,bundle_adjustment=no_ba_during_training)
+                validation_errors = epoch_evaluation(validation_data, model, conf, epoch, Phases.VALIDATION, save_predictions=True,bundle_adjustment=ba_during_training)
             else:
-                validation_errors = epoch_evaluation(train_data, model, conf, epoch, phase, save_predictions=True,bundle_adjustment=no_ba_during_training)
+                validation_errors = epoch_evaluation(train_data, model, conf, epoch, phase, save_predictions=True,bundle_adjustment=ba_during_training)
 
             metric = validation_errors.loc[["Mean"], validation_metric].sum(axis=1).values.item()
             for scene in validation_errors.index:

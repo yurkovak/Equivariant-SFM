@@ -136,6 +136,7 @@ def plot_cameras_before_and_after_ba(outputs, errors, conf, phase, scan, epoch=N
         ts_error = errors['ts_ba_mean']
         plot_cameras(Rs_pred, ts_pred, pts3D, Rs_gt, ts_gt, Rs_error, ts_error, conf, phase, scan=scan+'_ba', epoch=epoch)
 
+
 def get_points_colors(images_path, image_names, xs, first_occurence=False):
     m, n, _ = xs.shape
     points_colors = np.zeros([n, 3])
@@ -164,6 +165,7 @@ def get_points_colors(images_path, image_names, xs, first_occurence=False):
             points_colors[point_ind] = np.mean(colors[valid_points[:, point_ind], point_ind], axis=0)
 
     return points_colors
+
 
 def plot_cameras(Rs_pred, ts_pred, pts3D, Rs_gt, ts_gt, Rs_error, ts_error, conf, phase, scan=None, epoch=None):
     data = []

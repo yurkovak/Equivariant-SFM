@@ -4,6 +4,7 @@ from models.baseNet import BaseNet
 from models.layers import *
 from utils.sparse_utils import SparseMat
 from datasets.SceneData import SceneData
+from utils import general_utils
 
 
 class SetOfSetBlock(nn.Module):
@@ -11,11 +12,14 @@ class SetOfSetBlock(nn.Module):
         super(SetOfSetBlock, self).__init__()
         self.block_size = conf.get_int("model.block_size")
         self.use_skip = conf.get_bool("model.use_skip")
+        type_name = conf.get_string("model.layer_type", default='SetOfSetLayer')
+        self.layer_type = general_utils.get_class("models.layers." + type_name)
+        self.layer_kwargs = dict(conf['model'].get('layer_extra_params', {}))
 
         modules = []
-        modules.extend([SetOfSetLayer(d_in, d_out), NormalizationLayer()])
+        modules.extend([self.layer_type(d_in, d_out, **self.layer_kwargs), NormalizationLayer()])
         for i in range(1, self.block_size):
-            modules.extend([ActivationLayer(), SetOfSetLayer(d_out, d_out), NormalizationLayer()])
+            modules.extend([ActivationLayer(), self.layer_type(d_out, d_out, **self.layer_kwargs), NormalizationLayer()])
         self.layers = nn.Sequential(*modules)
 
         self.final_act = ActivationLayer()

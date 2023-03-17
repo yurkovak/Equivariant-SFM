@@ -12,6 +12,8 @@ def train_single_model(conf, device, phase):
 
     # Create model
     model = general_utils.get_class("models." + conf.get_string("model.type"))(conf).to(device)
+    print(model)
+    print(f'Num parameters: {sum([x.numel() for x in model.parameters()])}')
     if phase is Phases.FINE_TUNE:
         path = path_utils.path_to_model(conf, Phases.TRAINING)
         model.load_state_dict(torch.load(path))

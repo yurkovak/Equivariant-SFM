@@ -30,8 +30,12 @@ def prepare_predictions(data, pred_cam, conf, bundle_adjustment):
     outputs['xs'] = xs  # to compute reprojection error later
     outputs['Ps'] = Ps
     outputs['Ps_norm'] = Ps_norm
-    outputs['pts3D_pred'] = pts3D_pred  # 4,m
+    outputs['pts3D_pred'] = pts3D_pred  # 4,n
     outputs['pts3D_triangulated'] = pts3D_triangulated  # 4,n
+    if hasattr(data, 'damaged_track_indices'):
+        outputs['clean_track_ids'] = [ind for ind in range(pts3D_pred.shape[1]) if ind not in data.damaged_track_indices]
+        outputs['pts3D_pred_clean'] = pts3D_pred[:, outputs['clean_track_ids']]  # 4,n'
+        outputs['pts3D_triangulated_clean'] = pts3D_triangulated[:, outputs['clean_track_ids']]  # 4,n'
 
     if calibrated:
         Ks = Ns_inv  # data.Ns.inverse().cpu().numpy()
@@ -92,6 +96,15 @@ def compute_errors(outputs, conf, bundle_adjustment):
     model_errors["our_repro"] = np.nanmean(geo_utils.reprojection_error_with_points(Ps, pts3D_pred.T, xs))
     # triangulated_repro doesn't involve predictions, it's a baseline
     model_errors["triangulated_repro"] = np.nanmean(geo_utils.reprojection_error_with_points(Ps, pts3D_triangulated.T, xs))
+
+    if outputs.get('clean_track_ids', False):
+        pts3D_pred_clean = outputs['pts3D_pred_clean']
+        pts3D_triangulated_clean = outputs['pts3D_triangulated_clean']
+        model_errors["our_repro_clean"] = \
+            np.nanmean(geo_utils.reprojection_error_with_points(Ps, pts3D_pred_clean.T, xs[:, outputs['clean_track_ids']]))
+        model_errors["triangulated_repro_clean"] = \
+            np.nanmean(geo_utils.reprojection_error_with_points(Ps, pts3D_triangulated_clean.T, xs[:, outputs['clean_track_ids']]))
+
     if calibrated:
         Rs_fixed = outputs['Rs_fixed']
         ts_fixed = outputs['ts_fixed']

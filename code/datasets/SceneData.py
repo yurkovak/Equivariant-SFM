@@ -8,7 +8,8 @@ import warnings
 
 
 class SceneData:
-    def __init__(self, M, Ns, Ps_gt, scan_name, dilute_M=False):
+    def __init__(self, M, Ns, Ps_gt, scan_name, dilute_M=False,
+                 outliers_ratio: float = 0., damaged_track_ratio: float = 0.0, track_outliers_ratio: float = 0.0):
         n_images = Ps_gt.shape[0]
 
         # Set attribute
@@ -20,6 +21,14 @@ class SceneData:
         # Dilute M
         if dilute_M:
             self.M = geo_utils.dilutePoint(M)
+
+        import copy
+        self.M_ = copy.deepcopy(self.M)
+        if outliers_ratio > 0:
+            self.M, self.outlier_indices = geo_utils.pollute_M(M, outliers_ratio)
+        if damaged_track_ratio > 0:
+            self.M, self.damaged_track_indices, self.track_outlier_indices = \
+                geo_utils.damage_tracks(M, damaged_track_ratio, track_outliers_ratio)
 
         # M to sparse matrix
         self.x = dataset_utils.M2sparse(M, normalize=True, Ns=Ns)
@@ -52,6 +61,9 @@ def create_scene_data(conf):
     scan = conf.get_string('dataset.scan')
     calibrated = conf.get_bool('dataset.calibrated')
     dilute_M = conf.get_bool('dataset.diluteM', default=False)
+    outliers_ratio = conf.get_float('dataset.outliers_ratio', default=0.)
+    damaged_track_ratio = conf.get_float('dataset.damaged_track_ratio', default=0.)
+    track_outliers_ratio = conf.get_float('dataset.track_outliers_ratio', default=0.)
 
     # Get raw data
     if calibrated:
@@ -59,10 +71,14 @@ def create_scene_data(conf):
     else:
         M, Ns, Ps_gt = Projective.get_raw_data(conf, scan)
 
-    return SceneData(M, Ns, Ps_gt, scan, dilute_M)
+    return SceneData(M, Ns, Ps_gt, scan, dilute_M, outliers_ratio=outliers_ratio,
+                     damaged_track_ratio=damaged_track_ratio, track_outliers_ratio=track_outliers_ratio)
 
 
 def sample_data(data, num_samples, adjacent=True):
+    """For a given scene, randomly sample num_samples cameras (rows), adjacent or not.
+    Note: when the requested num_samples is more than available cameras, all cameras will be returned"""
+
     # Get indices
     indices = dataset_utils.sample_indices(len(data.y), num_samples, adjacent=adjacent)
     M_indices = np.sort(np.concatenate((2 * indices, 2 * indices + 1)))

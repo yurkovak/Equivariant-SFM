@@ -19,7 +19,7 @@ def sample_indices(N, num_samples, adjacent):
     if num_samples == 1:  # Return all the data
         indices = np.arange(N)
     else:
-        if num_samples < 1:
+        if num_samples < 1:  # fraction
             num_samples = int(np.ceil(num_samples * N))
         num_samples = max(2, num_samples)
         if num_samples>=N:
