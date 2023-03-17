@@ -153,6 +153,34 @@ class SetOfSetLayerSelfAttention(Module):
         return SparseMat(new_features, x.indices, x.cam_per_pts, x.pts_per_cam, new_shape)
 
 
+class InTrackAttentionLayer(Module):
+    """
+    Note: extremely computationally slow due to a for loop
+    """
+    def __init__(self, d_in, d_out, num_heads):
+        super(
+        ).__init__()
+        self.norm = torch.nn.LayerNorm(d_in, eps=1e-6)
+        self.lin_qkv = Linear(d_in, d_out * 3)
+        self.lin = Linear(d_out, d_out)
+        self.num_heads = num_heads
+
+    def forward(self, x: SparseMat):
+        # x is [m,n,d] sparse matrix
+        new_features = self.lin_qkv(self.norm(x.values))  # [all_points, d_in] -> [all_points, d_out]
+        features_by_track, inds_by_track = [], []
+        for track_i in range(x.shape[1]):
+            track_mask = x.indices[1] == track_i
+            track_features = new_features[x.indices[1] == track_i, :]
+            new_track_features, _ = multi_head_attention(track_features, self.num_heads)
+            features_by_track.append(new_track_features)
+            inds_by_track.append(x.indices[:, track_mask])
+
+        new_values = self.lin(torch.cat(features_by_track))
+        new_shape = (x.shape[0], x.shape[1], new_values.shape[1])
+        return SparseMat(new_values, torch.cat(inds_by_track, dim=1), x.cam_per_pts, x.pts_per_cam, new_shape)
+
+
 class ProjLayer(Module):
     def __init__(self, d_in, d_out):
         super(ProjLayer, self).__init__()
