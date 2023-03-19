@@ -11,5 +11,5 @@ matplotlib
 dask
 pytorch3d
 tensorboard
-sklearn
+scikit-learn
 openpyxl

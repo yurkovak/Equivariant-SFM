@@ -22,8 +22,6 @@ class SceneData:
         if dilute_M:
             self.M = geo_utils.dilutePoint(M)
 
-        import copy
-        self.M_ = copy.deepcopy(self.M)
         if outliers_ratio > 0:
             self.M, self.outlier_indices = geo_utils.pollute_M(M, outliers_ratio)
         if damaged_track_ratio > 0:
