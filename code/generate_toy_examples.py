@@ -114,6 +114,8 @@ class ToyGenerator:
         if row_subsample != None:
             sampled_rows = np.sort(np.random.choice(m, size=min(row_subsample, m), replace=False))
             M = M[np.sort(np.concatenate([sampled_rows * 2, sampled_rows * 2 + 1]))]
+            for key in ['Ps_gt', 'Ns', 'K_gt', 'R_gt', 'T_gt']:
+                scene_data[key] = scene_data[key][sampled_rows]
 
         if target_fraction is not None:
             M = geo_utils.sparsify_M(M, target_fraction)
